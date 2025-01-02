@@ -1,6 +1,5 @@
 use std::{env::args, error::Error, fs, io::Read, path::{Path, PathBuf}};
 extern crate nen_emulator;
-use input::handle_input;
 use nen_emulator::{cart::Cart, frame::{SCREEN_HEIGHT, SCREEN_WIDTH}, nes::Nes};
 use sdl2::{audio::AudioSpecDesired, event::Event, pixels::PixelFormatEnum};
 use std::time::{Duration, Instant};
@@ -9,7 +8,7 @@ mod sdl2ctx;
 use sdl2ctx::Sdl2Context;
 
 mod input;
-
+use input::handle_input;
 
 fn open_rom(path: &Path) -> Result<Cart, Box<dyn Error>> {
     let mut bytes = Vec::new();

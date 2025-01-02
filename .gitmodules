@@ -1,0 +1,3 @@
+[submodule "nen-emulator"]
+	path = nen-emulator
+	url = https://github.com/Comba92/nen-emulator
