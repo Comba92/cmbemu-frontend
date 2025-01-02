@@ -1,3 +1,6 @@
 [submodule "nen-emulator"]
 	path = nen-emulator
 	url = https://github.com/Comba92/nen-emulator
+[submodule "tomboy-emulator"]
+	path = tomboy-emulator
+	url = https://github.com/Comba92/tomboy-emulator.git

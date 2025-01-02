@@ -1,7 +1,8 @@
 use nen_emulator::{nes::Nes, joypad::JoypadButton as NesButton};
+use tomboy_emulator::{cpu::Cpu as Gb, joypad::Flags as GbButton};
 use sdl2::audio::AudioSpecDesired;
 
-use crate::input::{GameInput, InputEvent, InputKind};
+use crate::input::{GameInput, InputKind};
 
 pub trait Emulator {
   fn step_one_frame(&mut self);
@@ -10,11 +11,14 @@ pub trait Emulator {
   fn resolution(&self) -> (usize, usize);
   fn fps(&mut self) -> f32;
   fn audio_spec(&self) -> AudioSpecDesired;
-  fn input_event(&mut self, event: &GameInput, kind: InputKind);
+  fn input_event(&mut self, button: &GameInput, kind: InputKind);
 
   fn pause(&mut self);
   fn is_paused(&self) -> bool;
   fn reset(&mut self);
+
+  fn mute(&mut self);
+  fn is_muted(&mut self) -> bool;
 }
 
 impl Emulator for Nes {
@@ -55,4 +59,54 @@ impl Emulator for Nes {
   fn pause(&mut self) { self.is_paused = !self.is_paused; }
   fn is_paused(&self) -> bool { self.is_paused }
   fn reset(&mut self) { self.reset(); }
+
+  fn mute(&mut self) { self.is_muted = !self.is_muted; }
+  fn is_muted(&mut self) -> bool { self.is_muted }
+}
+
+impl Emulator for Gb {
+  fn step_one_frame(&mut self) {
+    while self.bus.ppu.vblank.take().is_none() {
+      self.step();
+    }
+  }
+
+  fn framebuf(&mut self) -> (&[u8], usize) {
+    let lcd = &self.bus.ppu.lcd;
+    (&lcd.buffer, lcd.pitch())
+  }
+
+  fn samples(&mut self) -> Vec<f32> { Vec::new() }
+
+  fn resolution(&self) -> (usize, usize) { (160, 144)}
+
+  fn fps(&mut self) -> f32 { 60.0 }
+
+  fn audio_spec(&self) -> AudioSpecDesired {
+    AudioSpecDesired { channels: Some(2), freq: Some(44100), samples: None }
+  }
+
+  fn input_event(&mut self, button: &GameInput, kind: InputKind) {
+    let method: fn(&mut Gb, GbButton) = match kind {
+      InputKind::Press   => |gb, btn| gb.bus.joypad.button_pressed(btn),
+      InputKind::Release => |gb, btn| gb.bus.joypad.button_released(btn)
+    };
+
+    match button {
+        GameInput::Up     => method(self, GbButton::select_up),
+        GameInput::Down   => method(self, GbButton::start_down),
+        GameInput::Left   => method(self, GbButton::b_left),
+        GameInput::Right  => method(self, GbButton::a_right),
+        GameInput::A      => method(self, GbButton::a_right),
+        GameInput::B      => method(self, GbButton::b_left),
+        GameInput::Start  => method(self, GbButton::start_down),
+        GameInput::Select => method(self, GbButton::select_up),
+    }
+  }
+
+  fn pause(&mut self) {}
+  fn is_paused(&self) -> bool { false }
+  fn reset(&mut self) {}
+  fn mute(&mut self) {}
+  fn is_muted(&mut self) -> bool { true }
 }

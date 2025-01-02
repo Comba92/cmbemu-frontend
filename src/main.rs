@@ -15,7 +15,7 @@ extern crate nen_emulator;
 use nen_emulator::nes::Nes;
 
 extern crate tomboy_emulator;
-
+use tomboy_emulator::cpu::Cpu as Gb;
 
 fn open_rom(path: &Path) -> Result<Box<dyn Emulator>, Box<dyn Error>> {
     let mut bytes = Vec::new();
@@ -33,6 +33,8 @@ fn open_rom(path: &Path) -> Result<Box<dyn Emulator>, Box<dyn Error>> {
     Nes::from_bytes(&bytes)
         .map(|x| Box::new(x) as Box<dyn Emulator>)
         .map_err(|msg| msg.into())
+        
+        .or_else(|_: Box<dyn Error>| Ok(Box::new(Gb::new(&bytes))))
 }
 
 fn init_emu<'a>(
@@ -49,7 +51,8 @@ fn init_emu<'a>(
 
     let audio_dev = audio
         .open_queue(None, &emu.audio_spec()).unwrap();
-    audio_dev.resume();
+    
+    if !emu.is_muted() { audio_dev.resume(); }
 
     let mut fps = emu.fps();
     fps = if fps == 0.0 { 0.0 } else { 1.0 / fps };
@@ -78,7 +81,7 @@ fn main() {
         if !emu.is_paused() {
             emu.step_one_frame();
             
-            if audio_dev.size() < audio_dev.spec().size*2 {
+            if !emu.is_muted() && audio_dev.size() < audio_dev.spec().size*2 {
                 emu.step_one_frame();
             }
 
