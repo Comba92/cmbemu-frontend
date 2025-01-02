@@ -1,0 +1,9 @@
+[package]
+name = "frontend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nen-emulator = { path = "nen-emulator" }
+sdl2 = "0.37.0"
+zip = "2.2.2"
