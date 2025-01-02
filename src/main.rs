@@ -1,8 +1,9 @@
-use std::{env::args, error::Error, fs, io::Read, path::{Path, PathBuf}};
-extern crate nen_emulator;
-use nen_emulator::{cart::Cart, nes::Nes};
-use sdl2::{audio::AudioSpecDesired, event::Event, pixels::PixelFormatEnum};
+use std::{error::Error, fs, io::Read, path::{Path, PathBuf}};
+use sdl2::{audio::AudioQueue, event::Event, pixels::PixelFormatEnum, render::{Canvas, Texture, TextureCreator}, video::{Window, WindowContext}, AudioSubsystem};
 use std::time::{Duration, Instant};
+
+mod emu;
+use emu::Emulator;
 
 mod sdl2ctx;
 use sdl2ctx::Sdl2Context;
@@ -10,7 +11,13 @@ use sdl2ctx::Sdl2Context;
 mod input;
 use input::handle_input;
 
-fn open_rom(path: &Path) -> Result<Cart, Box<dyn Error>> {
+extern crate nen_emulator;
+use nen_emulator::nes::Nes;
+
+extern crate tomboy_emulator;
+
+
+fn open_rom(path: &Path) -> Result<Box<dyn Emulator>, Box<dyn Error>> {
     let mut bytes = Vec::new();
     let file = fs::File::open(path)?;
     
@@ -23,7 +30,32 @@ fn open_rom(path: &Path) -> Result<Cart, Box<dyn Error>> {
             fs::File::open(path).map(|mut f| f.read_to_end(&mut bytes))
         )?;
 
-    Cart::new(&bytes).map_err(|msg| msg.into())
+    Nes::from_bytes(&bytes)
+        .map(|x| Box::new(x) as Box<dyn Emulator>)
+        .map_err(|msg| msg.into())
+}
+
+fn init_emu<'a>(
+    emu: &mut Box<dyn Emulator>,
+    audio: &AudioSubsystem,
+    canvas: &mut Canvas<Window>,
+    creator: &'a TextureCreator<WindowContext>,
+) -> (Duration, Texture<'a>, AudioQueue<f32>) {
+    let (width, height) = emu.resolution();
+    canvas.set_logical_size(width as u32, height as u32).unwrap();
+
+    let texture = creator
+        .create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32).unwrap();
+
+    let audio_dev = audio
+        .open_queue(None, &emu.audio_spec()).unwrap();
+    audio_dev.resume();
+
+    let mut fps = emu.fps();
+    fps = if fps == 0.0 { 0.0 } else { 1.0 / fps };
+    let frame_ms = Duration::from_secs_f32(fps);
+
+    (frame_ms, texture, audio_dev)
 }
 
 fn main() {
@@ -34,53 +66,23 @@ fn main() {
     let mut sdl = Sdl2Context
         ::new("NenEmulator", WINDOW_WIDTH, WINDOW_HEIGHT)
         .unwrap();
-    
-    let filename = args().nth(1);
-    let rom_path = if let Some(filename) = filename {
-        PathBuf::from(filename)
-    } else { PathBuf::from("") };
-    
-    let mut emu = Nes::empty();
-    let mut ms_frame = Duration::from_secs_f32(0.0);
+    let texture_creator = sdl.canvas.texture_creator();
 
-    if rom_path.exists() {
-        let cart = open_rom(&rom_path);
-        if let Ok(cart) = cart {
-            emu = Nes::with_cart(cart);
-            ms_frame = Duration::from_secs_f32(1.0 / emu.get_fps());
-
-            // Keep aspect ratio
-            let (width, height) = emu.get_resolution();
-            sdl.canvas.set_logical_size(width as u32, height as u32).unwrap();
-        }
-    }
-
-    let mut texture = sdl.texture_creator.create_texture_target(
-        PixelFormatEnum::RGBA32, emu.get_screen().width as u32, emu.get_screen().height as u32
-    ).unwrap();
-
-    let desired_spec = AudioSpecDesired {
-        freq: Some(44100),
-        channels: Some(1),
-        samples: None,
-    };
-
-    let audio_dev = sdl.audio_subsystem
-        .open_queue::<f32, _>(None, &desired_spec).unwrap();
-
-    audio_dev.resume();
+    // Just default it to NES
+    let mut emu = Box::new(Nes::empty()) as Box<dyn Emulator>;
+    let (mut ms_frame, mut texture, mut audio_dev) = init_emu(&mut emu, &sdl.audio_subsystem, &mut sdl.canvas, &texture_creator);
 
     'running: loop {
         let ms_since_start = Instant::now();
 
-        if !emu.is_paused {
-            emu.step_until_vblank();
+        if !emu.is_paused() {
+            emu.step_one_frame();
             
             if audio_dev.size() < audio_dev.spec().size*2 {
-                emu.step_until_vblank();
+                emu.step_one_frame();
             }
 
-            audio_dev.queue_audio(&emu.get_samples()).unwrap();
+            audio_dev.queue_audio(&emu.samples()).unwrap();
         }
 
         for event in sdl.events.poll_iter() {
@@ -99,17 +101,13 @@ fn main() {
                     let rom_result = open_rom(&rom_path);
 
                     match rom_result {
-                        Ok(cart) => {
-                            emu.load_cart(cart);
-                            ms_frame = Duration::from_secs_f32(1.0 / emu.get_fps());
-                            // Keep aspect ratio
-                            let (width, height) = emu.get_resolution();
-                            sdl.canvas.set_logical_size(width as u32, height as u32).unwrap();
+                        Ok(new_emu) => {
+                            emu = new_emu;
+                            (ms_frame, texture, audio_dev) = 
+                                init_emu(&mut emu, &sdl.audio_subsystem, &mut sdl.canvas, &texture_creator);
                         }
                         Err(msg) => eprintln!("Couldn't load the rom: {msg}\n"),
                     };
-
-                    audio_dev.resume();
                 }
                 Event::ControllerDeviceAdded { which , .. } => {
                     match sdl.controller_subsystem.open(which) {
@@ -125,7 +123,8 @@ fn main() {
         }
 
         sdl.canvas.clear();
-        texture.update(None, &emu.get_screen().buffer, emu.get_screen().pitch()).unwrap();
+        let (framebuf, pitch) = emu.framebuf();
+        texture.update(None, &framebuf, pitch).unwrap();
         sdl.canvas.copy(&texture, None, None).unwrap();
         sdl.canvas.present();
 

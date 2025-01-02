@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 nen-emulator = { path = "nen-emulator" }
+tomboy-emulator = { path = "tomboy-emulator" }
+
 sdl2 = "0.37.0"
 zip = "2.2.2"

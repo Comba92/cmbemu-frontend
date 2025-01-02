@@ -1,5 +1,5 @@
 use std::error::Error;
-use sdl2::{controller::GameController, render::{Canvas, TextureCreator}, video::{Window, WindowContext}, AudioSubsystem, EventPump, GameControllerSubsystem, Sdl, VideoSubsystem};
+use sdl2::{controller::GameController, render::Canvas, video::Window, AudioSubsystem, EventPump, GameControllerSubsystem, Sdl, VideoSubsystem};
 
 use crate::input::Keymaps;
 
@@ -9,7 +9,6 @@ pub struct Sdl2Context {
   pub video_subsystem: VideoSubsystem,
   pub audio_subsystem: AudioSubsystem,
   pub canvas: Canvas<Window>,
-  pub texture_creator: TextureCreator<WindowContext>,
   pub events: EventPump,
   pub controller_subsystem: GameControllerSubsystem,
   pub controllers: Vec<GameController>,
@@ -30,8 +29,7 @@ impl Sdl2Context {
         .accelerated()
         // .present_vsync()
         .build()?;
-    
-    let texture_creator = canvas.texture_creator();
+
     let controller_subsystem = ctx.game_controller()?;
     let controllers = Vec::new();
     
@@ -39,7 +37,7 @@ impl Sdl2Context {
     let keymaps = Keymaps::new();
 
     Ok(
-      Self { ctx, video_subsystem, audio_subsystem, canvas, events, texture_creator, controller_subsystem, controllers, keymaps }
+      Self { ctx, video_subsystem, audio_subsystem, canvas, events, controller_subsystem, controllers, keymaps }
     )
   }
 }
