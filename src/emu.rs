@@ -31,11 +31,7 @@ impl Emulator for Nes {
   fn fps(&mut self) -> f32 { self.get_fps() }
 
   fn audio_spec(&self) -> AudioSpecDesired {
-    AudioSpecDesired {
-      freq: Some(44100),
-      channels: Some(1),
-      samples: None,
-    }
+    AudioSpecDesired { freq: Some(44100), channels: Some(1), samples: None, }
   }
 
   fn input_event(&mut self, button: &GameInput, kind: InputKind) {
@@ -77,9 +73,7 @@ impl Emulator for Gb {
   }
 
   fn samples(&mut self) -> Vec<f32> { Vec::new() }
-
   fn resolution(&self) -> (usize, usize) { (160, 144)}
-
   fn fps(&mut self) -> f32 { 60.0 }
 
   fn audio_spec(&self) -> AudioSpecDesired {
@@ -87,20 +81,24 @@ impl Emulator for Gb {
   }
 
   fn input_event(&mut self, button: &GameInput, kind: InputKind) {
-    let method: fn(&mut Gb, GbButton) = match kind {
+    let method_btn: fn(&mut Gb, GbButton) = match kind {
       InputKind::Press   => |gb, btn| gb.bus.joypad.button_pressed(btn),
       InputKind::Release => |gb, btn| gb.bus.joypad.button_released(btn)
     };
+    let method_dpad: fn(&mut Gb, GbButton) = match kind {
+      InputKind::Press   => |gb, btn| gb.bus.joypad.dpad_pressed(btn),
+      InputKind::Release => |gb, btn| gb.bus.joypad.dpad_released(btn)
+    };
 
     match button {
-        GameInput::Up     => method(self, GbButton::select_up),
-        GameInput::Down   => method(self, GbButton::start_down),
-        GameInput::Left   => method(self, GbButton::b_left),
-        GameInput::Right  => method(self, GbButton::a_right),
-        GameInput::A      => method(self, GbButton::a_right),
-        GameInput::B      => method(self, GbButton::b_left),
-        GameInput::Start  => method(self, GbButton::start_down),
-        GameInput::Select => method(self, GbButton::select_up),
+        GameInput::Up     => method_dpad(self, GbButton::select_up),
+        GameInput::Down   => method_dpad(self, GbButton::start_down),
+        GameInput::Left   => method_dpad(self, GbButton::b_left),
+        GameInput::Right  => method_dpad(self, GbButton::a_right),
+        GameInput::A      => method_btn(self, GbButton::a_right),
+        GameInput::B      => method_btn(self, GbButton::b_left),
+        GameInput::Start  => method_btn(self, GbButton::start_down),
+        GameInput::Select => method_btn(self, GbButton::select_up),
     }
   }
 

@@ -38,41 +38,41 @@ fn open_rom(path: &Path) -> Result<Box<dyn Emulator>, Box<dyn Error>> {
 
 fn init_emu<'a>(
 	emu: &mut Box<dyn Emulator>,
-	audio: &AudioSubsystem,
 	canvas: &mut Canvas<Window>,
 	creator: &'a TextureCreator<WindowContext>,
+	audio: &AudioSubsystem,
 ) -> (Duration, Texture<'a>, AudioQueue<f32>) {
 	let (width, height) = emu.resolution();
 	canvas.set_logical_size(width as u32, height as u32).unwrap();
 
 	let texture = creator
-		.create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32).unwrap();
+		.create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32)
+		.unwrap();
 
 	let audio_dev = audio
 		.open_queue(None, &emu.audio_spec()).unwrap();
-			
+
 	if !emu.is_muted() { audio_dev.resume(); }
 
-	let mut fps = emu.fps();
-	fps = if fps == 0.0 { 0.0 } else { 1.0 / fps };
-	let frame_ms = Duration::from_secs_f32(fps);
+	let frame_ms = Duration::from_secs_f32(1.0 / emu.fps());
 
 	(frame_ms, texture, audio_dev)
 }
 
 fn main() {
 	const SCALE: f32 = 3.5;
-	const WINDOW_WIDTH:  u32  = (SCALE * 30  as f32* 8.0) as u32;
-	const WINDOW_HEIGHT: u32  = (SCALE * 30 as f32* 8.0) as u32;
+	const WINDOW_WIDTH:  u32  = (SCALE * 30 as f32 * 8.0) as u32;
+	const WINDOW_HEIGHT: u32  = (SCALE * 30 as f32 * 8.0) as u32;
 			
 	let mut sdl = Sdl2Context
-		::new("NenEmulator", WINDOW_WIDTH, WINDOW_HEIGHT)
+		::new("CMBEmu", WINDOW_WIDTH, WINDOW_HEIGHT)
 		.unwrap();
 	let texture_creator = sdl.canvas.texture_creator();
 
 	// Just default it to NES
 	let mut emu = Box::new(Nes::empty()) as Box<dyn Emulator>;
-	let (mut ms_frame, mut texture, mut audio_dev) = init_emu(&mut emu, &sdl.audio_subsystem, &mut sdl.canvas, &texture_creator);
+	let (mut ms_frame, mut texture, mut audio_dev) = 
+		init_emu(&mut emu, &mut sdl.canvas, &texture_creator, &sdl.audio_subsystem);
 
 	'running: loop {
 		let ms_since_start = Instant::now();
@@ -83,8 +83,10 @@ fn main() {
 			if !emu.is_muted() && audio_dev.size() < audio_dev.spec().size*2 {
 				emu.step_one_frame();
 			}
-
-			audio_dev.queue_audio(&emu.samples()).unwrap();
+			
+			if !emu.is_muted() {
+				audio_dev.queue_audio(&emu.samples()).unwrap();
+			}
 		}
 
 		for event in sdl.events.poll_iter() {
@@ -106,9 +108,9 @@ fn main() {
 						Ok(new_emu) => {
 							emu = new_emu;
 							(ms_frame, texture, audio_dev) = 
-								init_emu(&mut emu, &sdl.audio_subsystem, &mut sdl.canvas, &texture_creator);
+								init_emu(&mut emu, &mut sdl.canvas, &texture_creator, &sdl.audio_subsystem);
 						}
-						Err(msg) => eprintln!("Couldn't load the rom: {msg}\n"),
+						Err(msg) => eprintln!("{msg}\n"),
 					};
 				}
 				Event::ControllerDeviceAdded { which , .. } => {
