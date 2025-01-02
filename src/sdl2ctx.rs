@@ -28,6 +28,7 @@ impl Sdl2Context {
     let canvas = window
         .into_canvas()
         .accelerated()
+        // .present_vsync()
         .build()?;
     
     let texture_creator = canvas.texture_creator();

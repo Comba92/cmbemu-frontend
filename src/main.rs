@@ -1,6 +1,6 @@
 use std::{env::args, error::Error, fs, io::Read, path::{Path, PathBuf}};
 extern crate nen_emulator;
-use nen_emulator::{cart::Cart, frame::{SCREEN_HEIGHT, SCREEN_WIDTH}, nes::Nes};
+use nen_emulator::{cart::Cart, nes::Nes};
 use sdl2::{audio::AudioSpecDesired, event::Event, pixels::PixelFormatEnum};
 use std::time::{Duration, Instant};
 
@@ -28,29 +28,30 @@ fn open_rom(path: &Path) -> Result<Cart, Box<dyn Error>> {
 
 fn main() {
     const SCALE: f32 = 3.5;
-    const WINDOW_WIDTH:  u32  = (SCALE * SCREEN_WIDTH  as f32* 8.0) as u32;
-    const WINDOW_HEIGHT: u32  = (SCALE * SCREEN_HEIGHT as f32* 8.0) as u32;
-    let ms_frame: Duration = Duration::from_secs_f64(1.0 / 60.0988);
-
+    const WINDOW_WIDTH:  u32  = (SCALE * 30  as f32* 8.0) as u32;
+    const WINDOW_HEIGHT: u32  = (SCALE * 30 as f32* 8.0) as u32;
+    
     let mut sdl = Sdl2Context
         ::new("NenEmulator", WINDOW_WIDTH, WINDOW_HEIGHT)
         .unwrap();
     
-    // Keep aspect ratio
-    sdl.canvas.set_logical_size(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32).unwrap();
-
     let filename = args().nth(1);
     let rom_path = if let Some(filename) = filename {
         PathBuf::from(filename)
     } else { PathBuf::from("") };
-
+    
     let mut emu = Nes::empty();
+    let mut ms_frame = Duration::from_secs_f32(0.0);
+
     if rom_path.exists() {
         let cart = open_rom(&rom_path);
         if let Ok(cart) = cart {
-            let rom_name =  rom_path.file_name().unwrap().to_str().unwrap_or("NenEmulator");
-            sdl.canvas.window_mut().set_title(rom_name).expect("Couldn't rename window title");
             emu = Nes::with_cart(cart);
+            ms_frame = Duration::from_secs_f32(1.0 / emu.get_fps());
+
+            // Keep aspect ratio
+            let (width, height) = emu.get_resolution();
+            sdl.canvas.set_logical_size(width as u32, height as u32).unwrap();
         }
     }
 
@@ -75,7 +76,7 @@ fn main() {
         if !emu.is_paused {
             emu.step_until_vblank();
             
-            if audio_dev.size() < 2096 {
+            if audio_dev.size() < audio_dev.spec().size*2 {
                 emu.step_until_vblank();
             }
 
@@ -99,9 +100,11 @@ fn main() {
 
                     match rom_result {
                         Ok(cart) => {
-                            let rom_name =  rom_path.file_name().unwrap().to_str().unwrap_or("NenEmulator");
-                            sdl.canvas.window_mut().set_title(rom_name).expect("Couldn't rename window title");
                             emu.load_cart(cart);
+                            ms_frame = Duration::from_secs_f32(1.0 / emu.get_fps());
+                            // Keep aspect ratio
+                            let (width, height) = emu.get_resolution();
+                            sdl.canvas.set_logical_size(width as u32, height as u32).unwrap();
                         }
                         Err(msg) => eprintln!("Couldn't load the rom: {msg}\n"),
                     };
