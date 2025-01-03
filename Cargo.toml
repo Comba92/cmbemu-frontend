@@ -9,3 +9,4 @@ tomboy-emulator = { path = "tomboy-emulator" }
 
 sdl2 = "0.37.0"
 zip = "2.2.2"
+bincode = "1.3.3"

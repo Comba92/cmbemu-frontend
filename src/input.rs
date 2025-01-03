@@ -1,18 +1,20 @@
 use std::collections::HashMap;
 
-use sdl2::{audio::{AudioQueue, AudioStatus}, controller::{self, Axis, Button}, event::Event, keyboard::{self, Keycode}};
+use sdl2::{audio::AudioStatus, controller::{self, Axis, Button}, event::Event, keyboard::{self, Keycode}};
 
-use crate::emu::Emulator;
+use crate::EmuContext;
 
 pub enum InputKind {
   Press, Release
 }
 
+#[derive(Clone, Copy)]
 pub enum InputEvent {
   Game(GameInput),
   Pause, Reset, Save, Load, Mute,
 }
 
+#[derive(Clone, Copy)]
 pub enum GameInput {
   Up, Down, Left, Right, A, B, Start, Select,
 }
@@ -23,8 +25,8 @@ pub struct Keymaps {
   keymap: HashMap<keyboard::Keycode, InputEvent>,
   padmap: HashMap<controller::Button, InputEvent>,
 }
-impl Keymaps {
-  pub fn new() -> Self {
+impl Default for Keymaps {
+  fn default() -> Self {
     use GameInput::*;
 
     let default_keymap = HashMap::from([
@@ -57,9 +59,12 @@ impl Keymaps {
   }
 }
 
-fn match_input(emu: &mut Box<dyn Emulator>, input: Option<&InputEvent>, kind: InputKind, audio_dev: &AudioQueue<f32>) {
+fn match_input(ctx: &mut EmuContext, input: Option<InputEvent>, kind: InputKind) {
+  let emu = &mut ctx.emu;
+  let audio_dev = &ctx.audio_dev;
+
   match input {
-    Some(InputEvent::Game(input)) => emu.input_event(input, kind),
+    Some(InputEvent::Game(input)) => emu.input_event(&input, kind),
     Some(InputEvent::Pause) => {
       emu.pause();
       match audio_dev.status() {
@@ -77,36 +82,40 @@ fn match_input(emu: &mut Box<dyn Emulator>, input: Option<&InputEvent>, kind: In
   }
 }
 
-pub fn handle_input(keys: &Keymaps, event: &Event, emu: &mut Box<dyn Emulator>, audio_dev: &AudioQueue<f32>) {
+pub fn handle_input(ctx: &mut EmuContext, event: &Event) {
   match event {
     Event::KeyDown { keycode, .. } => if let Some(keycode) = keycode {
-      match_input(emu, keys.keymap.get(keycode), InputKind::Press, audio_dev);
+      let input = ctx.keys.keymap.get(keycode).map(|x| x.to_owned());
+      match_input(ctx, input, InputKind::Press);
     },
     Event::KeyUp { keycode, .. } => if let Some(keycode) = keycode {
-      match_input(emu, keys.keymap.get(keycode), InputKind::Release, audio_dev);
+      let input = ctx.keys.keymap.get(keycode).map(|x| x.to_owned());
+      match_input(ctx, input, InputKind::Release);
     },
 
     Event::ControllerButtonDown { button, .. } => {
-      match_input(emu, keys.padmap.get(button), InputKind::Press, audio_dev);
+      let input = ctx.keys.padmap.get(button).map(|x| x.to_owned());
+      match_input(ctx, input, InputKind::Press);
     },
     Event::ControllerButtonUp { button, .. } => {
-      match_input(emu, keys.padmap.get(button), InputKind::Release, audio_dev);
+      let input = ctx.keys.padmap.get(button).map(|x| x.to_owned());
+      match_input(ctx, input, InputKind::Release);
     },
 
     Event::ControllerAxisMotion { axis: Axis::LeftX, value, .. } => {
-        if *value > AXIS_DEAD_ZONE { emu.input_event(&GameInput::Right, InputKind::Press); }
-        else if *value < -AXIS_DEAD_ZONE { emu.input_event(&GameInput::Left, InputKind::Press); }
+        if *value > AXIS_DEAD_ZONE { ctx.emu.input_event(&GameInput::Right, InputKind::Press); }
+        else if *value < -AXIS_DEAD_ZONE { ctx.emu.input_event(&GameInput::Left, InputKind::Press); }
         else {
-          emu.input_event(&GameInput::Left, InputKind::Release);
-          emu.input_event(&GameInput::Right, InputKind::Release);
+          ctx.emu.input_event(&GameInput::Left, InputKind::Release);
+          ctx.emu.input_event(&GameInput::Right, InputKind::Release);
         }
       }
       Event::ControllerAxisMotion { axis: Axis::LeftY, value, .. } => {
-        if *value > AXIS_DEAD_ZONE { emu.input_event(&GameInput::Down, InputKind::Press); }
-        else if *value < -AXIS_DEAD_ZONE { emu.input_event(&GameInput::Up, InputKind::Press); }
+        if *value > AXIS_DEAD_ZONE { ctx.emu.input_event(&GameInput::Down, InputKind::Press); }
+        else if *value < -AXIS_DEAD_ZONE { ctx.emu.input_event(&GameInput::Up, InputKind::Press); }
         else {
-          emu.input_event(&GameInput::Up, InputKind::Release);
-          emu.input_event(&GameInput::Down, InputKind::Release);
+          ctx.emu.input_event(&GameInput::Up, InputKind::Release);
+          ctx.emu.input_event(&GameInput::Down, InputKind::Release);
         }
       }
     _ => {}

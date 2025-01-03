@@ -1,8 +1,6 @@
 use std::error::Error;
 use sdl2::{controller::GameController, render::Canvas, video::Window, AudioSubsystem, EventPump, GameControllerSubsystem, Sdl, VideoSubsystem};
 
-use crate::input::Keymaps;
-
 #[allow(unused)]
 pub struct Sdl2Context {
   pub ctx: Sdl,
@@ -12,7 +10,6 @@ pub struct Sdl2Context {
   pub events: EventPump,
   pub controller_subsystem: GameControllerSubsystem,
   pub controllers: Vec<GameController>,
-  pub keymaps: Keymaps,
 }
 
 impl Sdl2Context {
@@ -34,10 +31,9 @@ impl Sdl2Context {
     let controllers = Vec::new();
     
     let events = ctx.event_pump()?;
-    let keymaps = Keymaps::new();
 
     Ok(
-      Self { ctx, video_subsystem, audio_subsystem, canvas, events, controller_subsystem, controllers, keymaps }
+      Self { ctx, video_subsystem, audio_subsystem, canvas, events, controller_subsystem, controllers }
     )
   }
 }

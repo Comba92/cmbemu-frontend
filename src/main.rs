@@ -1,5 +1,5 @@
 use std::{error::Error, fs, io::Read, path::{Path, PathBuf}};
-use sdl2::{audio::AudioQueue, event::Event, pixels::PixelFormatEnum, render::{Canvas, Texture, TextureCreator}, video::{Window, WindowContext}, AudioSubsystem};
+use sdl2::{audio::AudioQueue, event::Event, pixels::PixelFormatEnum, render::Canvas, video::Window, AudioSubsystem};
 use std::time::{Duration, Instant};
 
 mod emu;
@@ -9,15 +9,15 @@ mod sdl2ctx;
 use sdl2ctx::Sdl2Context;
 
 mod input;
-use input::handle_input;
+use input::{handle_input, Keymaps};
 
 extern crate nen_emulator;
-use nen_emulator::nes::Nes;
+use nen_emulator::{cart::is_nes_rom, nes::Nes};
 
 extern crate tomboy_emulator;
 use tomboy_emulator::cpu::Cpu as Gb;
 
-fn open_rom(path: &Path) -> Result<Box<dyn Emulator>, Box<dyn Error>> {
+fn open_rom(path: &Path) -> Result<Emulator, Box<dyn Error>> {
 	let mut bytes = Vec::new();
 	let file = fs::File::open(path)?;
 			
@@ -30,33 +30,56 @@ fn open_rom(path: &Path) -> Result<Box<dyn Emulator>, Box<dyn Error>> {
 			fs::File::open(path).map(|mut f| f.read_to_end(&mut bytes))
 		)?;
 
-	Nes::from_bytes(&bytes)
-		.map(|x| Box::new(x) as Box<dyn Emulator>)
+	
+	if is_nes_rom(&bytes) {
+		Nes::from_bytes(&bytes)
+		.map(|x| Box::new(x) as Emulator)
 		.map_err(|msg| msg.into())
-		.or_else(|_: Box<dyn Error>| Ok(Box::new(Gb::new(&bytes))))
+	} else {
+		Ok(Box::new(Gb::new(&bytes)) as Emulator)
+	}
 }
 
-fn init_emu<'a>(
-	emu: &mut Box<dyn Emulator>,
-	canvas: &mut Canvas<Window>,
-	creator: &'a TextureCreator<WindowContext>,
-	audio: &AudioSubsystem,
-) -> (Duration, Texture<'a>, AudioQueue<f32>) {
-	let (width, height) = emu.resolution();
-	canvas.set_logical_size(width as u32, height as u32).unwrap();
+struct EmuContext {
+	emu: Emulator,
+	ms_frame: Duration,
 
-	let texture = creator
-		.create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32)
-		.unwrap();
+	audio_dev: AudioQueue<f32>,
+	rom_path: PathBuf,
 
-	let audio_dev = audio
-		.open_queue(None, &emu.audio_spec()).unwrap();
+	keys: Keymaps,
+}
+impl EmuContext {
+	pub fn new(sdl: &Sdl2Context) -> Self {
+		let emu = Box::new(Nes::empty()) as Emulator;
 
-	if !emu.is_muted() { audio_dev.resume(); }
+		let audio_dev = sdl.audio_subsystem
+			.open_queue(None, &emu.audio_spec()).unwrap();
 
-	let frame_ms = Duration::from_secs_f32(1.0 / emu.fps());
+		let ms_frame = Duration::ZERO;
+		let keys = Keymaps::default();
 
-	(frame_ms, texture, audio_dev)
+		Self { emu, ms_frame, audio_dev, rom_path: PathBuf::new(), keys }
+	}
+
+	pub fn try_init(&mut self, rom_path: &Path, canvas: &mut Canvas<Window>, audio: &AudioSubsystem) -> Result<(), Box<dyn Error>> {
+		let emu = open_rom(rom_path)?;
+
+		let (width, height) = emu.resolution();
+		canvas.set_logical_size(width as u32, height as u32)?;
+
+		let audio_dev = audio
+			.open_queue(None, &emu.audio_spec())?;
+
+		audio_dev.resume();
+
+		self.ms_frame = Duration::from_secs_f32(1.0 / emu.fps());		
+		self.rom_path = rom_path.into();
+		self.audio_dev = audio_dev;
+		self.emu = emu;
+
+		Ok(())
+	}
 }
 
 fn main() {
@@ -65,53 +88,47 @@ fn main() {
 	const WINDOW_HEIGHT: u32  = (SCALE * 30 as f32 * 8.0) as u32;
 			
 	let mut sdl = Sdl2Context
-		::new("CMBEmu", WINDOW_WIDTH, WINDOW_HEIGHT)
+		::new("CMB Emu", WINDOW_WIDTH, WINDOW_HEIGHT)
 		.unwrap();
+	
+	// Just default it to NES
+	let mut ctx = EmuContext::new(&sdl);
 	let texture_creator = sdl.canvas.texture_creator();
 
-	// Just default it to NES
-	let mut emu = Box::new(Nes::empty()) as Box<dyn Emulator>;
-	let (mut ms_frame, mut texture, mut audio_dev) = 
-		init_emu(&mut emu, &mut sdl.canvas, &texture_creator, &sdl.audio_subsystem);
+	let (width, height) = ctx.emu.resolution();
+	let mut texture = texture_creator
+		.create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32)
+		.unwrap();
 
 	'running: loop {
 		let ms_since_start = Instant::now();
 
-		if !emu.is_paused() {
-			emu.step_one_frame();
+		if !ctx.emu.is_paused() {
+			ctx.emu.step_one_frame();
 			
-			if !emu.is_muted() && audio_dev.size() < audio_dev.spec().size*2 {
-				emu.step_one_frame();
+			if !ctx.emu.is_muted() && ctx.audio_dev.size() < ctx.audio_dev.spec().size*2 {
+				ctx.emu.step_one_frame();
 			}
 			
-			if !emu.is_muted() {
-				audio_dev.queue_audio(&emu.samples()).unwrap();
+			if ctx.emu.is_muted() {
+				ctx.emu.samples();
+			} else {
+				ctx.audio_dev.queue_audio(&ctx.emu.samples()).unwrap();
 			}
 		}
 
 		for event in sdl.events.poll_iter() {
-			handle_input(&sdl.keymaps, &event, &mut emu, &audio_dev);
+			handle_input(&mut ctx, &event);
 
 			match event {
 				Event::Quit { .. } => {
-					audio_dev.pause();
+					ctx.audio_dev.pause();
 					break 'running;
 				}
 				Event::DropFile { filename, .. } => {
-					audio_dev.pause();
-					audio_dev.clear();
-
-					let rom_path = &PathBuf::from(filename);
-					let rom_result = open_rom(&rom_path);
-
-					match rom_result {
-						Ok(new_emu) => {
-							emu = new_emu;
-							(ms_frame, texture, audio_dev) = 
-								init_emu(&mut emu, &mut sdl.canvas, &texture_creator, &sdl.audio_subsystem);
-						}
-						Err(msg) => eprintln!("{msg}\n"),
-					};
+					let _  = ctx
+						.try_init(&PathBuf::from(filename), &mut sdl.canvas, &sdl.audio_subsystem)
+						.inspect_err(|msg| eprintln!("{msg}\n"));
 				}
 				Event::ControllerDeviceAdded { which , .. } => {
 					match sdl.controller_subsystem.open(which) {
@@ -127,14 +144,29 @@ fn main() {
 		}
 
 		sdl.canvas.clear();
-		let (framebuf, pitch) = emu.framebuf();
+		let (framebuf, pitch) = ctx.emu.framebuf();
 		texture.update(None, &framebuf, pitch).unwrap();
 		sdl.canvas.copy(&texture, None, None).unwrap();
 		sdl.canvas.present();
 
 		let ms_elapsed = Instant::now() - ms_since_start;
-		if ms_frame > ms_elapsed {
-			std::thread::sleep(ms_frame - ms_elapsed);
+		if ctx.ms_frame > ms_elapsed {
+			std::thread::sleep(ctx.ms_frame - ms_elapsed);
 		}
+	}
+}
+
+#[cfg(test)]
+mod testing {
+    use nen_emulator::nes::Nes;
+
+	#[test]
+	fn ser_de() {
+		let mut nes = Nes::empty();
+		let file = std::fs::File::create("test.sav").unwrap();		
+		bincode::serialize_into(&file, &nes).unwrap();
+
+		let file = std::fs::File::open("test.sav").unwrap();
+		nes = bincode::deserialize_from(file).unwrap();
 	}
 }

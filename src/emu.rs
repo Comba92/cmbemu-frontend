@@ -4,12 +4,13 @@ use sdl2::audio::AudioSpecDesired;
 
 use crate::input::{GameInput, InputKind};
 
-pub trait Emulator {
+pub type Emulator = Box<dyn EmuInterface>;
+pub trait EmuInterface {
   fn step_one_frame(&mut self);
   fn framebuf(&mut self) -> (&[u8], usize);
   fn samples(&mut self) -> Vec<f32>;
   fn resolution(&self) -> (usize, usize);
-  fn fps(&mut self) -> f32;
+  fn fps(&self) -> f32;
   fn audio_spec(&self) -> AudioSpecDesired;
   fn input_event(&mut self, button: &GameInput, kind: InputKind);
 
@@ -19,16 +20,19 @@ pub trait Emulator {
 
   fn mute(&mut self);
   fn is_muted(&mut self) -> bool;
+
+  fn save(&self) {}
+  fn load(&mut self) {}
 }
 
-impl Emulator for Nes {
+impl EmuInterface for Nes {
   fn step_one_frame(&mut self) { self.step_until_vblank(); }
 
   fn framebuf(&mut self) -> (&[u8], usize) { (&self.get_screen().buffer, self.get_screen().pitch()) }
   fn samples(&mut self) -> Vec<f32> { self.get_samples() }
 
   fn resolution(&self) -> (usize, usize) { (32*8, 30*8) }
-  fn fps(&mut self) -> f32 { self.get_fps() }
+  fn fps(&self) -> f32 { self.get_fps() }
 
   fn audio_spec(&self) -> AudioSpecDesired {
     AudioSpecDesired { freq: Some(44100), channels: Some(1), samples: None, }
@@ -41,14 +45,14 @@ impl Emulator for Nes {
     };
 
     match button {
-        GameInput::Up     => method(self, NesButton::UP),
-        GameInput::Down   => method(self, NesButton::DOWN),
-        GameInput::Left   => method(self, NesButton::LEFT),
-        GameInput::Right  => method(self, NesButton::RIGHT),
-        GameInput::A      => method(self, NesButton::A),
-        GameInput::B      => method(self, NesButton::B),
-        GameInput::Start  => method(self, NesButton::START),
-        GameInput::Select => method(self, NesButton::SELECT),
+        GameInput::Up     => method(self, NesButton::up),
+        GameInput::Down   => method(self, NesButton::down),
+        GameInput::Left   => method(self, NesButton::left),
+        GameInput::Right  => method(self, NesButton::right),
+        GameInput::A      => method(self, NesButton::a),
+        GameInput::B      => method(self, NesButton::b),
+        GameInput::Start  => method(self, NesButton::start),
+        GameInput::Select => method(self, NesButton::select),
     }
   }
 
@@ -60,7 +64,7 @@ impl Emulator for Nes {
   fn is_muted(&mut self) -> bool { self.is_muted }
 }
 
-impl Emulator for Gb {
+impl EmuInterface for Gb {
   fn step_one_frame(&mut self) {
     while self.bus.ppu.vblank.take().is_none() {
       self.step();
@@ -74,7 +78,7 @@ impl Emulator for Gb {
 
   fn samples(&mut self) -> Vec<f32> { Vec::new() }
   fn resolution(&self) -> (usize, usize) { (160, 144)}
-  fn fps(&mut self) -> f32 { 60.0 }
+  fn fps(&self) -> f32 { 60.0 }
 
   fn audio_spec(&self) -> AudioSpecDesired {
     AudioSpecDesired { channels: Some(2), freq: Some(44100), samples: None }
