@@ -1,3 +1,5 @@
+use std::{fs, io::Write, path::{Path, PathBuf}};
+
 use nen_emulator::{nes::Nes, joypad::JoypadButton as NesButton};
 use tomboy_emulator::{cpu::Cpu as Gb, joypad::Flags as GbButton};
 use sdl2::audio::AudioSpecDesired;
@@ -11,18 +13,12 @@ pub trait EmuInterface {
   fn samples(&mut self) -> Vec<f32>;
   fn resolution(&self) -> (usize, usize);
   fn fps(&self) -> f32;
-  fn audio_spec(&self) -> AudioSpecDesired;
+  fn audio_spec(&self) -> (bool, AudioSpecDesired);
   fn input_event(&mut self, button: &GameInput, kind: InputKind);
-
-  fn pause(&mut self);
-  fn is_paused(&self) -> bool;
   fn reset(&mut self);
 
-  fn mute(&mut self);
-  fn is_muted(&mut self) -> bool;
-
-  fn save(&self) {}
-  fn load(&mut self) {}
+  fn save(&self, _path: &Path) {}
+  fn load(&mut self, _path: &Path) {}
 }
 
 impl EmuInterface for Nes {
@@ -34,8 +30,9 @@ impl EmuInterface for Nes {
   fn resolution(&self) -> (usize, usize) { (32*8, 30*8) }
   fn fps(&self) -> f32 { self.get_fps() }
 
-  fn audio_spec(&self) -> AudioSpecDesired {
-    AudioSpecDesired { freq: Some(44100), channels: Some(1), samples: None, }
+  fn audio_spec(&self) -> (bool, AudioSpecDesired) {
+    let spec = AudioSpecDesired { freq: Some(44100), channels: Some(1), samples: None, };
+    (true, spec)
   }
 
   fn input_event(&mut self, button: &GameInput, kind: InputKind) {
@@ -56,12 +53,28 @@ impl EmuInterface for Nes {
     }
   }
 
-  fn pause(&mut self) { self.is_paused = !self.is_paused; }
-  fn is_paused(&self) -> bool { self.is_paused }
   fn reset(&mut self) { self.reset(); }
+  
+  fn save(&self, path: &Path) {
+    let filename = PathBuf::from(path).with_extension(".sav");
+    let file = fs::File::create(filename).unwrap();
 
-  fn mute(&mut self) { self.is_muted = !self.is_muted; }
-  fn is_muted(&mut self) -> bool { self.is_muted }
+    let _ = bincode::serialize_into(file, self)
+      .map_err(|msg| eprintln!("Couldn't save: {msg}\n"));
+  }
+
+  fn load(&mut self, path: &Path) {
+    let filename = PathBuf::from(path).with_extension(".sav");
+    let file = fs::File::open(filename);
+
+    match file {
+      Ok(file) => {
+        *self = bincode::deserialize_from(file).unwrap();
+      }
+      Err(e) => eprintln!("No save found: {e}\n"),
+    }
+    
+  }
 }
 
 impl EmuInterface for Gb {
@@ -80,8 +93,9 @@ impl EmuInterface for Gb {
   fn resolution(&self) -> (usize, usize) { (160, 144)}
   fn fps(&self) -> f32 { 60.0 }
 
-  fn audio_spec(&self) -> AudioSpecDesired {
-    AudioSpecDesired { channels: Some(2), freq: Some(44100), samples: None }
+  fn audio_spec(&self) -> (bool, AudioSpecDesired) {
+    let spec = AudioSpecDesired { channels: Some(2), freq: Some(44100), samples: None };
+    (false, spec)
   }
 
   fn input_event(&mut self, button: &GameInput, kind: InputKind) {
@@ -106,9 +120,5 @@ impl EmuInterface for Gb {
     }
   }
 
-  fn pause(&mut self) {}
-  fn is_paused(&self) -> bool { false }
   fn reset(&mut self) {}
-  fn mute(&mut self) {}
-  fn is_muted(&mut self) -> bool { true }
 }

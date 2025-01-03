@@ -40,6 +40,9 @@ impl Default for Keymaps {
       (Keycode::M,      InputEvent::Game(Start)),
       (Keycode::Space,  InputEvent::Pause),
       (Keycode::R,      InputEvent::Reset),
+      (Keycode::T,      InputEvent::Mute),
+      (Keycode::Y,      InputEvent::Save),
+      (Keycode::U,      InputEvent::Load),
     ]);
 
     let default_padmap = HashMap::from([
@@ -60,24 +63,41 @@ impl Default for Keymaps {
 }
 
 fn match_input(ctx: &mut EmuContext, input: Option<InputEvent>, kind: InputKind) {
+  if input.is_none() { return; }
+  let input = input.unwrap();
+  
   let emu = &mut ctx.emu;
   let audio_dev = &ctx.audio_dev;
 
-  match input {
-    Some(InputEvent::Game(input)) => emu.input_event(&input, kind),
-    Some(InputEvent::Pause) => {
-      emu.pause();
+  match (&input, &kind) {
+    (InputEvent::Game(input), _) => emu.input_event(&input, kind),
+    (InputEvent::Pause, InputKind::Press) => {
+      ctx.is_paused = !ctx.is_paused;
+    
       match audio_dev.status() {
         AudioStatus::Playing => audio_dev.pause(),
         _ => audio_dev.resume(),
       }
     }
-    Some(InputEvent::Reset) => { 
+
+    (InputEvent::Reset, InputKind::Press)  => {
       emu.reset();
       audio_dev.pause();
       audio_dev.clear();
       audio_dev.resume();
     }
+    (InputEvent::Mute, InputKind::Press) => {
+      ctx.is_muted = !ctx.is_muted;
+      match audio_dev.status() {
+        AudioStatus::Playing => {
+          audio_dev.pause();
+          audio_dev.clear();
+        },
+        _ => audio_dev.resume(),
+      }
+    },
+    (InputEvent::Save, InputKind::Press) => ctx.emu.save(&ctx.rom_path),
+    (InputEvent::Load, InputKind::Press) => ctx.emu.load(&ctx.rom_path),
     _ => {}
   }
 }

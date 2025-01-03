@@ -1,5 +1,5 @@
 use std::{error::Error, fs, io::Read, path::{Path, PathBuf}};
-use sdl2::{audio::AudioQueue, event::Event, pixels::PixelFormatEnum, render::Canvas, video::Window, AudioSubsystem};
+use sdl2::{audio::AudioQueue, event::Event, pixels::PixelFormatEnum, render::{Canvas, Texture, TextureCreator}, video::{Window, WindowContext}, AudioSubsystem};
 use std::time::{Duration, Instant};
 
 mod emu;
@@ -42,6 +42,8 @@ fn open_rom(path: &Path) -> Result<Emulator, Box<dyn Error>> {
 
 struct EmuContext {
 	emu: Emulator,
+	is_paused: bool,
+	is_muted: bool,
 	ms_frame: Duration,
 
 	audio_dev: AudioQueue<f32>,
@@ -54,12 +56,12 @@ impl EmuContext {
 		let emu = Box::new(Nes::empty()) as Emulator;
 
 		let audio_dev = sdl.audio_subsystem
-			.open_queue(None, &emu.audio_spec()).unwrap();
+			.open_queue(None, &emu.audio_spec().1).unwrap();
 
 		let ms_frame = Duration::ZERO;
 		let keys = Keymaps::default();
 
-		Self { emu, ms_frame, audio_dev, rom_path: PathBuf::new(), keys }
+		Self { emu, ms_frame, audio_dev, rom_path: PathBuf::new(), keys, is_muted: true, is_paused: true, }
 	}
 
 	pub fn try_init(&mut self, rom_path: &Path, canvas: &mut Canvas<Window>, audio: &AudioSubsystem) -> Result<(), Box<dyn Error>> {
@@ -68,11 +70,15 @@ impl EmuContext {
 		let (width, height) = emu.resolution();
 		canvas.set_logical_size(width as u32, height as u32)?;
 
+		let (audio_enabled, spec) = emu.audio_spec();
 		let audio_dev = audio
-			.open_queue(None, &emu.audio_spec())?;
+			.open_queue(None, &spec)?;
 
-		audio_dev.resume();
+		audio_dev.clear();
+		if audio_enabled { audio_dev.resume(); }
 
+		self.is_paused = false;
+		self.is_muted = !audio_enabled;
 		self.ms_frame = Duration::from_secs_f32(1.0 / emu.fps());		
 		self.rom_path = rom_path.into();
 		self.audio_dev = audio_dev;
@@ -80,6 +86,13 @@ impl EmuContext {
 
 		Ok(())
 	}
+}
+
+fn new_texture<'a>(ctx: &EmuContext, creator: &'a TextureCreator<WindowContext>) -> Texture<'a> {
+	let (width, height) = ctx.emu.resolution();
+	creator
+		.create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32)
+		.unwrap()
 }
 
 fn main() {
@@ -93,24 +106,21 @@ fn main() {
 	
 	// Just default it to NES
 	let mut ctx = EmuContext::new(&sdl);
-	let texture_creator = sdl.canvas.texture_creator();
 
-	let (width, height) = ctx.emu.resolution();
-	let mut texture = texture_creator
-		.create_texture_target(PixelFormatEnum::RGBA32, width as u32, height as u32)
-		.unwrap();
+	let texture_creator = sdl.canvas.texture_creator();
+	let mut texture = new_texture(&ctx, &texture_creator);
 
 	'running: loop {
 		let ms_since_start = Instant::now();
 
-		if !ctx.emu.is_paused() {
+		if !ctx.is_paused {
 			ctx.emu.step_one_frame();
 			
-			if !ctx.emu.is_muted() && ctx.audio_dev.size() < ctx.audio_dev.spec().size*2 {
+			if !ctx.is_muted && ctx.audio_dev.size() < 735*2 {
 				ctx.emu.step_one_frame();
 			}
 			
-			if ctx.emu.is_muted() {
+			if ctx.is_muted {
 				ctx.emu.samples();
 			} else {
 				ctx.audio_dev.queue_audio(&ctx.emu.samples()).unwrap();
@@ -129,6 +139,8 @@ fn main() {
 					let _  = ctx
 						.try_init(&PathBuf::from(filename), &mut sdl.canvas, &sdl.audio_subsystem)
 						.inspect_err(|msg| eprintln!("{msg}\n"));
+
+					texture = new_texture(&ctx, &texture_creator);
 				}
 				Event::ControllerDeviceAdded { which , .. } => {
 					match sdl.controller_subsystem.open(which) {
