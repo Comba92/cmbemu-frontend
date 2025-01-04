@@ -15,7 +15,7 @@ extern crate nen_emulator;
 use nen_emulator::{cart::is_nes_rom, nes::Nes};
 
 extern crate tomboy_emulator;
-use tomboy_emulator::cpu::Cpu as Gb;
+use tomboy_emulator::{cart::is_gb_rom, gb::Gameboy};
 
 fn open_rom(path: &Path) -> Result<Emulator, Box<dyn Error>> {
 	let mut bytes = Vec::new();
@@ -32,11 +32,15 @@ fn open_rom(path: &Path) -> Result<Emulator, Box<dyn Error>> {
 
 	
 	if is_nes_rom(&bytes) {
-		Nes::from_bytes(&bytes)
+		Nes::boot_from_bytes(&bytes)
+		.map(|x| Box::new(x) as Emulator)
+		.map_err(|msg| msg.into())
+	} else if is_gb_rom(&bytes) {
+		Gameboy::boot_from_bytes(&bytes)
 		.map(|x| Box::new(x) as Emulator)
 		.map_err(|msg| msg.into())
 	} else {
-		Ok(Box::new(Gb::new(&bytes)) as Emulator)
+		Err("No valid ROM".into())
 	}
 }
 
@@ -53,7 +57,7 @@ struct EmuContext {
 }
 impl EmuContext {
 	pub fn new(sdl: &Sdl2Context) -> Self {
-		let emu = Box::new(Nes::empty()) as Emulator;
+		let emu = Box::new(Nes::boot_empty()) as Emulator;
 
 		let audio_dev = sdl.audio_subsystem
 			.open_queue(None, &emu.audio_spec().1).unwrap();
@@ -137,8 +141,8 @@ fn main() {
 				}
 				Event::DropFile { filename, .. } => {
 					let _  = ctx
-						.try_init(&PathBuf::from(filename), &mut sdl.canvas, &sdl.audio_subsystem)
-						.inspect_err(|msg| eprintln!("{msg}\n"));
+					.try_init(&PathBuf::from(filename), &mut sdl.canvas, &sdl.audio_subsystem)
+					.inspect_err(|msg| eprintln!("{msg}\n"));
 
 					texture = new_texture(&ctx, &texture_creator);
 				}
@@ -170,15 +174,25 @@ fn main() {
 
 #[cfg(test)]
 mod testing {
+    use std::io::{Read, Write};
+
     use nen_emulator::nes::Nes;
 
 	#[test]
 	fn ser_de() {
-		let mut nes = Nes::empty();
-		let file = std::fs::File::create("test.sav").unwrap();		
-		bincode::serialize_into(&file, &nes).unwrap();
+		let test_rom = std::fs::read("./nen-emulator/roms/Tetris (USA).nes").unwrap();
 
-		let file = std::fs::File::open("test.sav").unwrap();
+		let mut nes = Nes::boot_from_bytes(&test_rom).unwrap();
+
+		let mut file = std::fs::File::create("test.sav").unwrap();		
+		bincode::serialize_into(&file, &nes).unwrap();
+		// let ser = ron::to_string(&nes).unwrap();
+		// file.write_fmt(format_args!("{ser}")).unwrap();
+
+		let mut file = std::fs::File::open("test.sav").unwrap();
 		nes = bincode::deserialize_from(file).unwrap();
+		// let mut de = String::new();
+		// file.read_to_string(&mut de).unwrap();
+		// nes = ron::from_str(&de).unwrap(); 
 	}
 }

@@ -96,8 +96,16 @@ fn match_input(ctx: &mut EmuContext, input: Option<InputEvent>, kind: InputKind)
         _ => audio_dev.resume(),
       }
     },
-    (InputEvent::Save, InputKind::Press) => ctx.emu.save(&ctx.rom_path),
-    (InputEvent::Load, InputKind::Press) => ctx.emu.load(&ctx.rom_path),
+    (InputEvent::Save, InputKind::Press) => {
+      ctx.audio_dev.pause();
+      ctx.emu.save(&ctx.rom_path);
+      if !ctx.is_muted { ctx.audio_dev.resume(); }
+    }
+    (InputEvent::Load, InputKind::Press) => {
+      ctx.audio_dev.pause();
+      ctx.emu.load(&ctx.rom_path);
+      if !ctx.is_muted { ctx.audio_dev.resume(); }
+    }
     _ => {}
   }
 }
