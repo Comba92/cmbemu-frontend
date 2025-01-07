@@ -30,19 +30,19 @@ impl Default for Keymaps {
     use GameInput::*;
 
     let default_keymap = HashMap::from([
-      (Keycode::Z,      InputEvent::Game(A)),
-      (Keycode::X,      InputEvent::Game(B)),
-      (Keycode::UP,     InputEvent::Game(Up)),
-      (Keycode::DOWN,   InputEvent::Game(Down)),
-      (Keycode::LEFT,   InputEvent::Game(Left)),
-      (Keycode::RIGHT,  InputEvent::Game(Right)),
-      (Keycode::N,      InputEvent::Game(Select)),
-      (Keycode::M,      InputEvent::Game(Start)),
+      (Keycode::K,   InputEvent::Game(A)),
+      (Keycode::L,   InputEvent::Game(B)),
+      (Keycode::W,   InputEvent::Game(Up)),
+      (Keycode::S,   InputEvent::Game(Down)),
+      (Keycode::A,   InputEvent::Game(Left)),
+      (Keycode::D,   InputEvent::Game(Right)),
+      (Keycode::I,      InputEvent::Game(Select)),
+      (Keycode::O,      InputEvent::Game(Start)),
       (Keycode::Space,  InputEvent::Pause),
       (Keycode::R,      InputEvent::Reset),
-      (Keycode::T,      InputEvent::Mute),
-      (Keycode::Y,      InputEvent::Save),
-      (Keycode::U,      InputEvent::Load),
+      (Keycode::M,      InputEvent::Mute),
+      (Keycode::NUM_9,   InputEvent::Save),
+      (Keycode::NUM_0,   InputEvent::Load),
     ]);
 
     let default_padmap = HashMap::from([

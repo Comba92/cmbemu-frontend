@@ -97,7 +97,7 @@ impl EmuInterface for Gameboy {
 
   fn samples(&mut self) -> Vec<f32> { Vec::new() }
   fn resolution(&self) -> (usize, usize) { (160, 144) }
-  fn fps(&self) -> f32 { 60.0 }
+  fn fps(&self) -> f32 { 59.73 }
 
   fn audio_spec(&self) -> (bool, AudioSpecDesired) {
     let spec = AudioSpecDesired { channels: Some(2), freq: Some(44100), samples: None };
