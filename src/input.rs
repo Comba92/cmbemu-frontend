@@ -85,6 +85,7 @@ fn match_input(ctx: &mut EmuContext, input: Option<InputEvent>, kind: InputKind)
       audio_dev.pause();
       audio_dev.clear();
       audio_dev.resume();
+      ctx.is_paused = false;
     }
     (InputEvent::Mute, InputKind::Press) => {
       ctx.is_muted = !ctx.is_muted;

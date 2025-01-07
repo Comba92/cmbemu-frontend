@@ -56,7 +56,7 @@ impl EmuInterface for Nes {
   fn reset(&mut self) { self.reset(); }
   
   fn save(&self, path: &Path) {
-    let filename = PathBuf::from(path).with_extension(".sav");
+    let filename = PathBuf::from(path).with_extension("sav");
     let mut file = fs::File::create(filename).unwrap();
 
     // let _ = bincode::serialize_into(file, self)
@@ -67,7 +67,7 @@ impl EmuInterface for Nes {
   }
 
   fn load(&mut self, path: &Path) {
-    let filename = PathBuf::from(path).with_extension(".sav");
+    let filename = PathBuf::from(path).with_extension("sav");
     let file = fs::File::open(filename);
 
     match file {
