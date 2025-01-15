@@ -76,10 +76,9 @@ impl EmuInterface for Nes {
 
         let mut de = String::new();
         file.read_to_string(&mut de).unwrap();
-        let mut new_emu: Self = ron::from_str(&de).unwrap(); 
+        let new_emu: Self = ron::from_str(&de).unwrap(); 
 
-        new_emu.load_rom_only(&self.get_bus().cart.borrow());
-        *self = new_emu;
+        self.load_from_emu(new_emu);
       }
       Err(e) => eprintln!("No save found: {e}\n"),
     }

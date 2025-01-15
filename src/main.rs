@@ -120,7 +120,7 @@ fn main() {
 		if !ctx.is_paused {
 			ctx.emu.step_one_frame();
 			
-			if !ctx.is_muted && ctx.audio_dev.size() < 735*2 {
+			if !ctx.is_muted && ctx.audio_dev.size() < 735*3 {
 				ctx.emu.step_one_frame();
 			}
 			
