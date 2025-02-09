@@ -12,7 +12,7 @@ mod input;
 use input::{handle_input, Keymaps};
 
 extern crate nen_emulator;
-use nen_emulator::{cart::is_nes_rom, nes::Nes};
+use nen_emulator::{cart::is_nes_rom, Nes};
 
 extern crate tomboy_emulator;
 use tomboy_emulator::{cart::is_gb_rom, gb::Gameboy};
@@ -100,7 +100,7 @@ fn new_texture<'a>(ctx: &EmuContext, creator: &'a TextureCreator<WindowContext>)
 }
 
 fn main() {
-	const SCALE: f32 = 3.5;
+	const SCALE: f32 = 3.0;
 	const WINDOW_WIDTH:  u32  = (SCALE * 30 as f32 * 8.0) as u32;
 	const WINDOW_HEIGHT: u32  = (SCALE * 30 as f32 * 8.0) as u32;
 			
@@ -120,7 +120,7 @@ fn main() {
 		if !ctx.is_paused {
 			ctx.emu.step_one_frame();
 			
-			if !ctx.is_muted && ctx.audio_dev.size() < 735*3 {
+			if !ctx.is_muted && ctx.audio_dev.size() < 95*6 {
 				ctx.emu.step_one_frame();
 			}
 			
@@ -169,30 +169,5 @@ fn main() {
 		if ctx.ms_frame > ms_elapsed {
 			std::thread::sleep(ctx.ms_frame - ms_elapsed);
 		}
-	}
-}
-
-#[cfg(test)]
-mod testing {
-    use std::io::{Read, Write};
-
-    use nen_emulator::nes::Nes;
-
-	#[test]
-	fn ser_de() {
-		let test_rom = std::fs::read("./nen-emulator/roms/Tetris (USA).nes").unwrap();
-
-		let mut nes = Nes::boot_from_bytes(&test_rom).unwrap();
-
-		let mut file = std::fs::File::create("test.sav").unwrap();		
-		bincode::serialize_into(&file, &nes).unwrap();
-		// let ser = ron::to_string(&nes).unwrap();
-		// file.write_fmt(format_args!("{ser}")).unwrap();
-
-		let mut file = std::fs::File::open("test.sav").unwrap();
-		nes = bincode::deserialize_from(file).unwrap();
-		// let mut de = String::new();
-		// file.read_to_string(&mut de).unwrap();
-		// nes = ron::from_str(&de).unwrap(); 
 	}
 }

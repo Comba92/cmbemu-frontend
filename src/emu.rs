@@ -1,6 +1,6 @@
 use std::{fs, io::{Read, Write}, path::{Path, PathBuf}};
 
-use nen_emulator::{nes::Nes, joypad::JoypadButton as NesButton};
+use nen_emulator::{Nes, joypad::JoypadButton as NesButton};
 use tomboy_emulator::{gb::Gameboy, joypad::Flags as GbButton};
 use sdl2::audio::AudioSpecDesired;
 
@@ -62,7 +62,8 @@ impl EmuInterface for Nes {
     // let _ = bincode::serialize_into(file, self)
     //   .map_err(|msg| eprintln!("Couldn't save: {msg}\n"));
 
-    let ser = ron::to_string(&self).unwrap();
+    let config = ron::ser::PrettyConfig::new().compact_arrays(true);
+    let ser = ron::ser::to_string_pretty(&self, config).unwrap();
 		file.write_fmt(format_args!("{ser}")).unwrap();
   }
 
@@ -94,14 +95,14 @@ impl EmuInterface for Gameboy {
     (&lcd.buffer, lcd.pitch())
   }
 
-  fn samples(&mut self) -> Vec<f32> { Vec::new() }
+  fn samples(&mut self) -> Vec<f32> { self.get_samples() }
   fn resolution(&self) -> (usize, usize) { (160, 144) }
   fn fps(&self) -> f32 { 59.73 }
 
   fn audio_spec(&self) -> (bool, AudioSpecDesired) {
     let spec = AudioSpecDesired { channels: Some(2), freq: Some(44100), samples: None };
     // TODO: as gb doesn't yet have sound functionality, it is disabled by default
-    (false, spec)
+    (true, spec)
   }
 
   fn input_event(&mut self, button: &GameInput, kind: InputKind) {
